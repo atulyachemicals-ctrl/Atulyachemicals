@@ -24,6 +24,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   const { login, loginWithGoogle, signup, updateProfile, logout, isAuthenticated, customer } = useAuth();
 
+  const [sameAsShipping, setSameAsShipping] = useState(true);
+
   useEffect(() => {
     if (customer) {
       setFullName(customer.fullName || '');
@@ -34,6 +36,20 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setShippingAddress(customer.shippingAddress || '');
     }
   }, [customer]);
+
+  const handleShippingAddressChange = (value: string) => {
+    setShippingAddress(value);
+    if (sameAsShipping) {
+      setBillingAddress(value);
+    }
+  };
+
+  const handleSameAsShippingToggle = (checked: boolean) => {
+    setSameAsShipping(checked);
+    if (checked) {
+      setBillingAddress(shippingAddress);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -49,7 +65,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           phone,
           companyName,
           gstNumber,
-          billingAddress,
+          billingAddress: sameAsShipping ? shippingAddress : billingAddress,
           shippingAddress,
         });
       } else {
@@ -89,7 +105,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         phone,
         companyName,
         gstNumber,
-        billingAddress,
+        billingAddress: sameAsShipping ? shippingAddress : billingAddress,
         shippingAddress,
       });
       setIsEditingProfile(false);
@@ -197,27 +213,44 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
-                      Billing Address
-                    </label>
-                    <textarea
-                      value={billingAddress}
-                      onChange={(e) => setBillingAddress(e.target.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
                       Shipping Address
                     </label>
                     <textarea
                       value={shippingAddress}
-                      onChange={(e) => setShippingAddress(e.target.value)}
+                      onChange={(e) => handleShippingAddressChange(e.target.value)}
                       rows={2}
+                      placeholder="Street, City, State, Pincode"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="editSameAsShipping"
+                      checked={sameAsShipping}
+                      onChange={(e) => handleSameAsShippingToggle(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <label htmlFor="editSameAsShipping" className="text-xs text-gray-700 font-medium">
+                      Billing address same as shipping address
+                    </label>
+                  </div>
+
+                  {!sameAsShipping && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                        Billing Address
+                      </label>
+                      <textarea
+                        value={billingAddress}
+                        onChange={(e) => setBillingAddress(e.target.value)}
+                        rows={2}
+                        placeholder="Billing Street, City, State, Pincode"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
 
                   <div className="flex gap-3 pt-2">
                     <button
@@ -387,18 +420,60 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
                       <div>
                         <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
-                          GST Number *
+                          GST Number
                         </label>
                         <input
                           type="text"
                           value={gstNumber}
                           onChange={(e) => setGstNumber(e.target.value)}
-                          required
                           placeholder="22AAAAA0000A1Z5"
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                     </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                        Shipping Address *
+                      </label>
+                      <textarea
+                        value={shippingAddress}
+                        onChange={(e) => handleShippingAddressChange(e.target.value)}
+                        required
+                        rows={2}
+                        placeholder="Street, City, State, Pincode"
+                        className="w-full px-3.5 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="signupSameAsShipping"
+                        checked={sameAsShipping}
+                        onChange={(e) => handleSameAsShippingToggle(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <label htmlFor="signupSameAsShipping" className="text-xs text-gray-700 font-medium">
+                        Billing address same as shipping address
+                      </label>
+                    </div>
+
+                    {!sameAsShipping && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                          Billing Address *
+                        </label>
+                        <textarea
+                          value={billingAddress}
+                          onChange={(e) => setBillingAddress(e.target.value)}
+                          required
+                          rows={2}
+                          placeholder="Billing Street, City, State, Pincode"
+                          className="w-full px-3.5 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -464,3 +539,4 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     </div>
   );
 }
+

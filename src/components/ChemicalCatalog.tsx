@@ -5,18 +5,20 @@ import {
   Package,
   Loader2,
   RefreshCw,
+  ArrowLeft,
 } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { parseWeightFromPackaging } from '../utils/weightParser';
 import { fetchGoogleSheetData } from '../services/googleSheets';
 import GoogleSheetConfigModal from './GoogleSheetConfigModal';
+import { matchChemical } from '../utils/searchUtils';
 
 interface PackagingOption {
   packing: string;
   price: string;
 }
 
-interface Chemical {
+export interface Chemical {
   'S.NO': string;
   'PRODUCT NAME': string;
   'CAS NO.': string;
@@ -26,17 +28,20 @@ interface Chemical {
 
 interface ChemicalCatalogProps {
   searchQuery: string;
+  onClearSearch?: () => void;
 }
 
 const ITEMS_PER_PAGE = 24;
 const CACHE_KEY = 'atulya_chemicals_data';
 const LAST_SYNC_KEY = 'atulya_chemicals_last_sync';
 
-export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
+export default function ChemicalCatalog({ searchQuery, onClearSearch }: ChemicalCatalogProps) {
   const [chemicals, setChemicals] = useState<Chemical[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [preSearchPage, setPreSearchPage] = useState<number>(1);
+  const [prevSearchQuery, setPrevSearchQuery] = useState<string>('');
   const [selectedPackaging, setSelectedPackaging] = useState<Record<string, number>>({});
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
@@ -121,7 +126,6 @@ export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
 
   const fetchChemicals = useCallback(async (isManualSync = false) => {
     try {
-      // Stale-While-Revalidate: load cache first if available
       const cachedData = localStorage.getItem(CACHE_KEY);
 
       if (cachedData && !isManualSync) {
@@ -136,7 +140,6 @@ export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
         }
       }
 
-      // Fetch live data directly from Google Sheets
       const rawData = await fetchGoogleSheetData();
       const normalizedData = normalizeChemicalData(rawData);
 
@@ -160,29 +163,35 @@ export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
     fetchChemicals();
   }, [fetchChemicals]);
 
+  // Handle Search & Page Restoration
+  useEffect(() => {
+    const trimmedQuery = searchQuery.trim();
+    const prevTrimmed = prevSearchQuery.trim();
+
+    if (!prevTrimmed && trimmedQuery) {
+      // Initiating search: record current page
+      setPreSearchPage(currentPage);
+      setCurrentPage(1);
+    } else if (prevTrimmed && !trimmedQuery) {
+      // Clearing search: restore pre-search page
+      setCurrentPage(preSearchPage);
+    }
+    setPrevSearchQuery(searchQuery);
+  }, [searchQuery]);
+
+  // Advanced search matching across complete catalog
   const filteredChemicals = useMemo(() => {
     if (!searchQuery.trim()) return chemicals;
-
-    const query = searchQuery.toLowerCase();
-    return chemicals.filter(
-      (chem) =>
-        chem['PRODUCT NAME']?.toLowerCase().includes(query) ||
-        chem['CAS NO.']?.toLowerCase().includes(query) ||
-        chem['HSN CODE']?.toLowerCase().includes(query)
-    );
+    return chemicals.filter((chem) => matchChemical(chem, searchQuery));
   }, [chemicals, searchQuery]);
 
-  const totalPages = Math.ceil(filteredChemicals.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredChemicals.length / ITEMS_PER_PAGE) || 1;
 
   const paginatedChemicals = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
     return filteredChemicals.slice(startIndex, endIndex);
   }, [filteredChemicals, currentPage]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
 
   const handlePreviousPage = () => {
     setCurrentPage((prev) => Math.max(1, prev - 1));
@@ -191,6 +200,14 @@ export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
 
   const handleNextPage = () => {
     setCurrentPage((prev) => Math.min(totalPages, prev + 1));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleReturnToPreSearchPage = () => {
+    if (onClearSearch) {
+      onClearSearch();
+    }
+    setCurrentPage(preSearchPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -251,53 +268,113 @@ export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
 
   return (
     <div className="space-y-6">
+      {/* Active Search Banner with Return Action */}
+      {searchQuery.trim() && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-600 text-white rounded-lg">
+              <Package className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-blue-900">
+                Search Results for: <span className="underline decoration-blue-400">"{searchQuery}"</span>
+              </p>
+              <p className="text-xs text-blue-700">
+                Found {filteredChemicals.length} matching products in catalog
+              </p>
+            </div>
+          </div>
 
+          <button
+            onClick={handleReturnToPreSearchPage}
+            className="flex items-center gap-2 bg-white hover:bg-blue-100 text-blue-800 font-semibold px-4 py-2 rounded-lg border border-blue-300 text-xs sm:text-sm transition-colors shadow-2xs"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Clear Search &amp; Return to Page {preSearchPage}
+          </button>
+        </div>
+      )}
+
+      {/* Catalog Header Info with Top Pagination Controls */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xs">
+        <p className="text-xs sm:text-sm text-gray-600 font-medium">
+          Showing Page <span className="font-bold text-gray-900">{currentPage}</span> of{' '}
+          <span className="font-bold text-gray-900">{totalPages}</span> ({filteredChemicals.length} total products)
+        </p>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handlePreviousPage}
+            disabled={currentPage === 1}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors text-sm font-semibold text-gray-700 shadow-2xs"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous Page
+          </button>
+
+          <span className="text-xs sm:text-sm font-bold text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
+            {currentPage} / {totalPages}
+          </span>
+
+          <button
+            onClick={handleNextPage}
+            disabled={currentPage === totalPages}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors text-sm font-semibold text-gray-700 shadow-2xs"
+          >
+            Next Page
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
 
       {filteredChemicals.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+        <div className="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-2xs">
           <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-600 text-lg font-semibold">No chemicals found matching "{searchQuery}".</p>
-          <p className="text-gray-400 text-sm mt-1">Try searching by CAS Number or HSN Code.</p>
+          <p className="text-gray-700 text-lg font-bold">No chemicals found matching "{searchQuery}".</p>
+          <p className="text-gray-500 text-sm mt-1 mb-4">
+            Try searching by chemical name, CAS Number, HSN Code, or partial keywords.
+          </p>
+          <button
+            onClick={handleReturnToPreSearchPage}
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Return to Full Product List (Page {preSearchPage})
+          </button>
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between">
-            <p className="text-xs sm:text-sm text-gray-600 font-medium">
-              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} -{' '}
-              {Math.min(currentPage * ITEMS_PER_PAGE, filteredChemicals.length)} of{' '}
-              <span className="font-bold text-gray-900">{filteredChemicals.length}</span> chemicals
-            </p>
-          </div>
-
+          {/* Product Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedChemicals.map((chemical, index) => (
               <div
                 key={`${chemical['S.NO']}-${index}`}
-                className="bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all duration-200 overflow-hidden flex flex-col justify-between"
+                className="bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col justify-between relative"
               >
                 <div className="p-6">
-                  <div className="mb-4">
-                    <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-2 min-h-[3.5rem] leading-snug">
+                  <div className="mb-3">
+                    {/* FULL PRODUCT NAME VISIBILITY (No line clamp, fully readable) */}
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900 leading-snug whitespace-normal break-words">
                       {chemical['PRODUCT NAME']}
                     </h3>
+                  </div>
 
-                    <div className="space-y-2 bg-gray-50/80 rounded-lg p-3 border border-gray-200/80">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          CAS Number:
-                        </span>
-                        <span className="text-sm font-mono text-blue-700 font-semibold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                          {chemical['CAS NO.'] || 'N/A'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between border-t border-gray-200/60 pt-2">
-                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          HSN Code:
-                        </span>
-                        <span className="text-sm font-mono text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                          {chemical['HSN CODE'] || 'N/A'}
-                        </span>
-                      </div>
+                  <div className="space-y-2 bg-gray-50/80 rounded-lg p-3 border border-gray-200/80 mb-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        CAS Number:
+                      </span>
+                      <span className="text-sm font-mono text-blue-700 font-semibold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                        {chemical['CAS NO.'] || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-gray-200/60 pt-2">
+                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        HSN Code:
+                      </span>
+                      <span className="text-sm font-mono text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                        {chemical['HSN CODE'] || 'N/A'}
+                      </span>
                     </div>
                   </div>
 
@@ -308,8 +385,8 @@ export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
                       </p>
                       <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                         {chemical.packagingOptions.map((option, optionIndex) => {
-                          const chemicalKey = `${chemical['S.NO']}-${index}`;
-                          const isSelected = selectedPackaging[chemicalKey] === optionIndex;
+                          const optionKey = `${chemical['S.NO']}-${index}`;
+                          const isOptionSelected = selectedPackaging[optionKey] === optionIndex;
 
                           return (
                             <div
@@ -317,11 +394,11 @@ export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
                               onClick={() =>
                                 setSelectedPackaging((prev) => ({
                                   ...prev,
-                                  [chemicalKey]: optionIndex,
+                                  [optionKey]: optionIndex,
                                 }))
                               }
                               className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                                isSelected
+                                isOptionSelected
                                   ? 'border-blue-600 bg-blue-50/80 shadow-xs'
                                   : 'border-gray-200 hover:border-gray-300 bg-white'
                               }`}
@@ -350,8 +427,8 @@ export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
                 <div className="p-6 pt-0">
                   <button
                     onClick={() => {
-                      const chemicalKey = `${chemical['S.NO']}-${index}`;
-                      const selectedIndex = selectedPackaging[chemicalKey] ?? 0;
+                      const optionKey = `${chemical['S.NO']}-${index}`;
+                      const selectedIndex = selectedPackaging[optionKey] ?? 0;
                       const selectedOption = chemical.packagingOptions[selectedIndex];
                       if (selectedOption) {
                         handleAddToCart(chemical, selectedOption);
@@ -368,33 +445,37 @@ export default function ChemicalCatalog({ searchQuery }: ChemicalCatalogProps) {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4 py-8">
+          {/* Pagination Controls */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-8 border-t border-gray-200">
+            <p className="text-xs sm:text-sm text-gray-600 font-medium">
+              Showing Page <span className="font-bold text-gray-900">{currentPage}</span> of{' '}
+              <span className="font-bold text-gray-900">{totalPages}</span> ({filteredChemicals.length} total products)
+            </p>
+
+            <div className="flex items-center gap-3">
               <button
                 onClick={handlePreviousPage}
                 disabled={currentPage === 1}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium text-gray-700"
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors text-sm font-semibold text-gray-700 shadow-2xs"
               >
                 <ChevronLeft className="h-4 w-4" />
-                Previous
+                Previous Page
               </button>
 
-              <div className="flex items-center gap-2">
-                <span className="text-gray-700 font-semibold text-sm">
-                  Page {currentPage} of {totalPages}
-                </span>
-              </div>
+              <span className="text-xs sm:text-sm font-bold text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
+                {currentPage} / {totalPages}
+              </span>
 
               <button
                 onClick={handleNextPage}
                 disabled={currentPage === totalPages}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium text-gray-700"
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors text-sm font-semibold text-gray-700 shadow-2xs"
               >
-                Next
+                Next Page
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-          )}
+          </div>
         </>
       )}
 

@@ -1,26 +1,36 @@
 import { useState } from 'react';
-import { Search, ShoppingCart, User, Menu, X } from 'lucide-react';
+import { Search, ShoppingCart, User, Menu, X, Truck } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import logo from '../assets/atulya_chemicals_re-_jpeg.jpg';
 
 interface HeaderProps {
+  searchQuery: string;
   onSearchChange: (query: string) => void;
   onMenuToggle: () => void;
   onAuthClick: () => void;
   onCartClick: () => void;
+  onTrackOrderClick?: () => void;
 }
 
-export default function Header({ onSearchChange, onMenuToggle, onAuthClick, onCartClick }: HeaderProps) {
-  const [searchQuery, setSearchQuery] = useState('');
+export default function Header({
+  searchQuery,
+  onSearchChange,
+  onMenuToggle,
+  onAuthClick,
+  onCartClick,
+  onTrackOrderClick,
+}: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { cartCount } = useCart();
   const { isAuthenticated, customer } = useAuth();
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-    onSearchChange(value);
+    onSearchChange(e.target.value);
+  };
+
+  const handleClearSearch = () => {
+    onSearchChange('');
   };
 
   const handleMenuClick = () => {
@@ -62,12 +72,32 @@ export default function Header({ onSearchChange, onMenuToggle, onAuthClick, onCa
                 placeholder="Search by Product Name, CAS Number, or HSN Code..."
                 value={searchQuery}
                 onChange={handleSearchChange}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
               />
+              {searchQuery && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+                  title="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {onTrackOrderClick && (
+              <button
+                onClick={onTrackOrderClick}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                title="Track Shiprocket Courier"
+              >
+                <Truck className="h-4 w-4 text-blue-600" />
+                <span>Track Order</span>
+              </button>
+            )}
+
             <button
               onClick={onCartClick}
               className="relative p-2 rounded-md hover:bg-gray-100 transition-colors"
@@ -96,3 +126,4 @@ export default function Header({ onSearchChange, onMenuToggle, onAuthClick, onCa
     </header>
   );
 }
+

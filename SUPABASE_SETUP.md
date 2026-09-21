@@ -90,14 +90,32 @@ To allow visitors to click **"Continue with Google"**:
    - Go to [Google Cloud Console > Credentials](https://console.cloud.google.com/apis/credentials).
    - Click **Create Credentials > OAuth client ID**.
    - Choose **Web Application**.
+   - Under **Authorized JavaScript origins**, add your Vercel URL (e.g. `https://your-app.vercel.app`).
    - Under **Authorized redirect URIs**, add your Supabase Callback URL found in the Supabase Google Provider settings:
      `https://mfoeqlvqgtiptvicxrtm.supabase.co/auth/v1/callback`
 4. Copy the generated **Client ID** and **Client Secret** from Google Cloud Console into the Supabase Google Provider configuration settings and click **Save**.
 
 ---
 
-## Step 3: Local Storage Fallback Guarantee
+## Step 3: Configure Vercel Domain in Supabase URL Configuration (Crucial for Vercel Deployment!)
 
-Your website includes a **hybrid offline/guest fallback system**:
-- Cart additions, quantity updates, and deletions work **instantly for all visitors** (even if they are not logged in or if Supabase database tables have not been created yet).
-- When visitors sign in, their guest cart items automatically synchronize with Supabase!
+When deployed to Vercel, Supabase needs to know your live Vercel domain URL so it redirects back to Vercel instead of `localhost`:
+
+1. Go to **Supabase Dashboard > Authentication > URL Configuration**.
+2. Set **Site URL** to your Vercel URL (e.g. `https://your-app.vercel.app`).
+3. Under **Redirect URLs**, click **Add URL** and add:
+   - `https://your-app.vercel.app/**`
+   - `https://*.vercel.app/**`
+4. Click **Save**.
+
+---
+
+## Step 4: Add Environment Variables in Vercel
+
+In your **Vercel Project Dashboard > Settings > Environment Variables**:
+Add the following 2 keys:
+
+- `VITE_SUPABASE_URL` = `https://mfoeqlvqgtiptvicxrtm.supabase.co`
+- `VITE_SUPABASE_ANON_KEY` = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+
+Then trigger a **Redeploy** on Vercel.
