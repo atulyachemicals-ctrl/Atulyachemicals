@@ -7,4 +7,14 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  server: {
+    proxy: {
+      '/api/shiprocket': {
+        target: 'https://apiv2.shiprocket.in/v1/external',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api\/shiprocket/, ''),
+      },
+    },
+  },
 });

@@ -9,8 +9,8 @@ export default function MobileMenu({ isOpen, onNavigate }: MobileMenuProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 top-16 z-40 bg-white border-t border-gray-200">
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="fixed inset-0 top-16 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 overflow-y-auto max-h-[calc(100vh-4rem)]">
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-20">
         <ul className="space-y-3">
           <li>
             <button

@@ -4,7 +4,9 @@
  * order creation, and tracking for standard courier services.
  */
 
-const SHIPROCKET_BASE_URL = 'https://apiv2.shiprocket.in/v1/external';
+const SHIPROCKET_BASE_URL = import.meta.env.DEV 
+  ? '/api/shiprocket' 
+  : 'https://apiv2.shiprocket.in/v1/external';
 
 export interface CourierOption {
   id: number;
@@ -154,43 +156,91 @@ export async function checkPincodeServiceability(
 }
 
 /**
- * Simulated Standard Courier Rates for Pincodes
+ * Simulated Standard Courier Rates tailored dynamically per Indian Pincode Zone & Distance
  */
 function calculateSimulatedRates(
   deliveryPincode: string,
   weightKg: number,
   isCod: boolean
 ): ServiceabilityResponse {
-  // Simple region zone calculation based on pincode leading digit
-  const leadDigit = parseInt(deliveryPincode[0], 10);
-  
-  // Non-serviceable pincode simulation (e.g. 0XXXXX or invalid regions)
-  if (leadDigit === 0 || leadDigit > 9) {
+  const pin = deliveryPincode.trim();
+  const leadDigit = parseInt(pin[0], 10);
+  const prefix = parseInt(pin.substring(0, 2), 10);
+
+  // Non-serviceable pincodes (invalid lead digit or specific test codes)
+  if (isNaN(leadDigit) || leadDigit === 0 || pin === '999999' || pin === '000000') {
     return {
       isServiceable: false,
-      deliveryPincode,
+      deliveryPincode: pin,
       couriers: [],
-      message: 'This pincode is currently not serviceable by standard courier.',
+      message: `Pincode ${pin} is not serviceable by standard courier.`,
     };
   }
 
-  // Base rate calculation per weight slab
-  const weightSlabs = Math.max(1, Math.ceil(weightKg));
+  // Weight slabs (minimum 0.5kg, rounded up to next 0.5kg)
+  const weightSlabs = Math.max(1, Math.ceil(weightKg * 2) / 2);
+  const pinVal = parseInt(pin, 10);
   
-  // Gujarat / Western region (Pincode 3XXXXX) gets local rate, others get zonal
-  const isLocalZone = deliveryPincode.startsWith('38') || deliveryPincode.startsWith('39');
-  const baseRate = isLocalZone ? 60 : leadDigit <= 4 ? 80 : 105;
-  const perKgRate = isLocalZone ? 30 : 45;
+  // Deterministic pincode-specific hash offset (gives unique price per pincode)
+  const pinUniqueOffset = (pinVal % 23) * 4; 
+  const etdVariance = (pinVal % 3);
 
-  const codExtra = isCod ? 40 : 0;
-  const standardFreight = baseRate + (weightSlabs - 1) * perKgRate + codExtra;
+  let zoneName = 'Standard Zone';
+  let baseRate = 95;
+  let perKgRate = 40;
+  let minDays = 3;
+  let maxDays = 5;
+
+  // Zone A: Intra-State Gujarat (Pincode 36xxxx - 39xxxx)
+  if (prefix >= 36 && prefix <= 39) {
+    zoneName = 'Gujarat Intra-State Local Zone';
+    baseRate = 50;
+    perKgRate = 25;
+    minDays = 1;
+    maxDays = 2;
+  }
+  // Zone B: Western & Central India (MP 45-48, Maharashtra 40-44, Rajasthan 30-34, Goa 40)
+  else if ((prefix >= 40 && prefix <= 48) || (prefix >= 30 && prefix <= 34)) {
+    zoneName = 'West & Central Regional Zone';
+    baseRate = 80;
+    perKgRate = 35;
+    minDays = 2;
+    maxDays = 3 + etdVariance;
+  }
+  // Zone C: North & South Metros/Hubs (Delhi/NCR 11-13, UP 20-28, Punjab/HR 14-16, TN/KA/TS/AP 50-64)
+  else if ((prefix >= 11 && prefix <= 28) || (prefix >= 50 && prefix <= 64)) {
+    zoneName = 'North & South Express Corridor';
+    baseRate = 120;
+    perKgRate = 50;
+    minDays = 3;
+    maxDays = 4 + etdVariance;
+  }
+  // Zone D: Eastern India (West Bengal 70-74, Odisha 75-77, Bihar/Jharkhand 80-85, Kerala 67-69)
+  else if ((prefix >= 70 && prefix <= 77) || (prefix >= 80 && prefix <= 85) || (prefix >= 67 && prefix <= 69)) {
+    zoneName = 'East & Deep South Zone';
+    baseRate = 155;
+    perKgRate = 60;
+    minDays = 4;
+    maxDays = 6 + etdVariance;
+  }
+  // Zone E: Special / North East / J&K / Islands (Assam/NE 78-79, J&K 18-19, HP 17, Andaman 744)
+  else {
+    zoneName = 'Special Regional / Hill & NE Zone';
+    baseRate = 220;
+    perKgRate = 85;
+    minDays = 5;
+    maxDays = 8 + etdVariance;
+  }
+
+  const codExtra = isCod ? 45 : 0;
+  const baseFreight = baseRate + (weightSlabs - 1) * perKgRate + pinUniqueOffset + codExtra;
 
   const couriers: CourierOption[] = [
     {
       id: 10,
       name: 'Delhivery Surface Courier',
-      rate: standardFreight,
-      etd: isLocalZone ? '1-2 Days' : '3-4 Days',
+      rate: Math.round(baseFreight),
+      etd: `${minDays}-${maxDays} Days`,
       rating: 4.5,
       codAvailable: true,
       minWeight: 0.5,
@@ -198,8 +248,8 @@ function calculateSimulatedRates(
     {
       id: 1,
       name: 'BlueDart Air Courier',
-      rate: Math.round(standardFreight * 1.35),
-      etd: isLocalZone ? '1 Day' : '2-3 Days',
+      rate: Math.round(baseFreight * 1.38 + 20),
+      etd: `${Math.max(1, minDays - 1)}-${Math.max(2, maxDays - 1)} Days`,
       rating: 4.8,
       codAvailable: true,
       minWeight: 0.5,
@@ -207,8 +257,8 @@ function calculateSimulatedRates(
     {
       id: 28,
       name: 'DTDC Standard Courier',
-      rate: Math.round(standardFreight * 0.95),
-      etd: isLocalZone ? '2 Days' : '4-5 Days',
+      rate: Math.round(baseFreight * 0.92),
+      etd: `${minDays + 1}-${maxDays + 1} Days`,
       rating: 4.3,
       codAvailable: false,
       minWeight: 0.5,
@@ -216,22 +266,32 @@ function calculateSimulatedRates(
     {
       id: 54,
       name: 'Ekart Express',
-      rate: Math.round(standardFreight * 1.1),
-      etd: isLocalZone ? '2 Days' : '3-5 Days',
+      rate: Math.round(baseFreight * 1.08),
+      etd: `${minDays}-${maxDays + 1} Days`,
       rating: 4.4,
+      codAvailable: true,
+      minWeight: 0.5,
+    },
+    {
+      id: 88,
+      name: 'Shadowfax Direct',
+      rate: Math.round(baseFreight * 0.96 + 10),
+      etd: `${minDays + 1}-${maxDays} Days`,
+      rating: 4.2,
       codAvailable: true,
       minWeight: 0.5,
     },
   ];
 
+  // Sort by freight rate ascending
   couriers.sort((a, b) => a.rate - b.rate);
 
   return {
     isServiceable: true,
-    deliveryPincode,
+    deliveryPincode: pin,
     couriers,
     recommendedCourier: couriers[0],
-    message: isLocalZone ? 'Local West Zone Express Available' : 'Standard India-wide Courier Available',
+    message: `${zoneName} (Pincode ${pin})`,
   };
 }
 
